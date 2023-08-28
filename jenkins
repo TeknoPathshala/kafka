@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Install and Configure Kafka') {
+            steps {
+                script {
+                    def kafkaVersion = "3.5.1"
+                    def kafkaScalaVersion = "2.12"
+                    def kafkaDownloadUrl = "https://downloads.apache.org/kafka/${kafkaVersion}/kafka_${kafkaScalaVersion}-${kafkaVersion}.tgz"
+
+                    try {
+                        // Download and extract Kafka
+                        sh "curl -LO ${kafkaDownloadUrl}"
+                        sh "tar -xzf kafka_${kafkaScalaVersion}-${kafkaVersion}.tgz"
+                        sh "mv kafka_${kafkaScalaVersion}-${kafkaVersion} /opt/kafka"
+
+                        // Update Kafka configuration
+                        sh 'echo "listeners=PLAINTEXT://:9092" >> /opt/kafka/config/server.properties'
+                        // Add more configuration settings as needed
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        error("Failed to install and configure Kafka: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        stage('Start Kafka') {
+            steps {
+                script {
+                    try {
+                        // Start Kafka server
+                        sh '/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/server.properties &'
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        error("Failed to start Kafka: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // Stop Kafka server
+            catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                sh '/opt/kafka/bin/kafka-server-stop.sh'
+            }
+        }
+    }
+}
